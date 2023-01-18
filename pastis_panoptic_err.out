@@ -1,0 +1,26 @@
+/var/spool/PBS/mom_priv/jobs/3288804.pbs.SC: line 12: module: command not found
+/var/spool/PBS/mom_priv/jobs/3288804.pbs.SC: line 13: module: command not found
+Traceback (most recent call last):
+  File "/mnt/hpccs01/home/nazib/PASTIS_training/panoptic-deeplab/tools/train_net.py", line 151, in main
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/utils/data/dataloader.py", line 681, in __next__
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/utils/data/dataloader.py", line 1376, in _next_data
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/utils/data/dataloader.py", line 1402, in _process_data
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/_utils.py", line 461, in reraise
+AssertionError: Caught AssertionError in DataLoader worker process 2.
+Original Traceback (most recent call last):
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/utils/data/_utils/worker.py", line 302, in _worker_loop
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/utils/data/_utils/fetch.py", line 49, in fetch
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/utils/data/_utils/fetch.py", line 49, in <listcomp>
+  File "/mnt/hpccs01/home/nazib/PASTIS_training/panoptic-deeplab/tools/../segmentation/data/datasets/base_dataset.py", line 99, in __getitem__
+AssertionError: Path does not exist: /home/nazib/Data/PASTIS/PASTIS_train/S2_30683_20190910.jpg
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/mnt/hpccs01/home/nazib/PASTIS_training/panoptic-deeplab/tools/train_net.py", line 245, in <module>
+  File "/mnt/hpccs01/home/nazib/PASTIS_training/panoptic-deeplab/tools/train_net.py", line 239, in main
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/serialization.py", line 376, in save
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/serialization.py", line 230, in _open_file_like
+  File "/home/nazib/miniconda3/envs/detectron/lib/python3.10/site-packages/torch/serialization.py", line 211, in __init__
+PermissionError: [Errno 13] Permission denied: './output/test/final_state.pth'
