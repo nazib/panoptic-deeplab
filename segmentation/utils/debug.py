@@ -73,7 +73,8 @@ def plot_pano_predictions(pano_predictions, pano_gt):
     ground_truth_semantic[ground_truth_semantic==255]=0
     colored_mask = np.zeros(shape=(128,128,3),dtype=np.float64)
     semantic_pred = Image.fromarray(pano_semantic_preds,'L').convert('RGB')
-
+    print(f"Unique classes:{np.unique(pano_semantic_preds)}")
+    print(f"Unique Instances:{np.unique(pano_instances)}")
     for inst_id in np.unique(pano_instances):
         if inst_id==0:
             continue # ignore background
@@ -106,17 +107,35 @@ def plot_pano_predictions(pano_predictions, pano_gt):
         except ValueError as e:
             print( cv2.findContours(mask.astype(int), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_SIMPLE))
     return Image.fromarray(colored_mask.astype(np.uint8),'RGB')
-            
+
+def save_label(image_numpy, image_path,colormap):
+        label = image_numpy[0]
+        MAX = image_numpy.max()
+        #image_numpy = image_numpy[None,:,:]
+        if image_numpy.shape[0] == 1:  # grayscale to RGB
+            image_numpy = np.tile(image_numpy, (3, 1, 1))
+        image_numpy = (np.transpose(image_numpy, (1, 2, 0)) + MAX) / 2.0*MAX * 255.0
+        
+        for i,cl in enumerate(colormap):
+            mask = (label==i).astype(int)
+            idx = np.where(mask==1)
+            if i==0 or i==19:
+                image_numpy[idx[0],idx[1],:] = [0,0,0]
+            else:
+                image_numpy[idx[0],idx[1],:] = colormap[i]
+
+        image_pil = Image.fromarray(image_numpy.astype(np.uint8))
+        image_pil.save(image_path)
             
 def plot_pano_gt(pano_gt):
-    ground_truth_instances = pano_gt['zone'].cpu().numpy()
+    ground_truth_instances = pano_gt['instance'].cpu().numpy()
     ground_truth_semantic = pano_gt['semantic'].cpu().numpy()
-    ground_truth_semantic[ground_truth_semantic==255]=0
+    ground_truth_semantic[ground_truth_semantic==19]=0
     colored_mask = np.zeros(shape=(128,128,3),dtype=np.float64)
-    for inst_id in np.unique(ground_truth_instances):
-        if inst_id==0 or inst_id==255:
+    for inst_id in np.unique(ground_truth_semantic):
+        if inst_id==0 or inst_id==19:
             continue  
-        mask = (ground_truth_instances==inst_id).astype(int)
+        mask = (ground_truth_semantic==inst_id).astype(int)
         try:
             #c,h =  cv2.findContours(mask[0].astype(np.uint8),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
             #c,h= cv2.findContours(mask[0].astype(np.uint8), cv2.RETR_FLOODFILL, cv2.CHAIN_APPROX_SIMPLE)
@@ -132,33 +151,30 @@ def plot_pano_gt(pano_gt):
                 colored_mask[idx[0],idx[1],0] = color[0]*255
                 colored_mask[idx[0],idx[1],1] = color[1]*255
                 colored_mask[idx[0],idx[1],2] = color[2]*255
-            
-            #x = Image.fromarray(colored_mask.astype(np.uint8),'RGB')
-            #x.save('test.jpg')
-            '''
-            for co in c[1::2]:  
-                poly = patches.Polygon(co[:,0,:], fill=True, alpha=alpha, linewidth=0, color=color)
-                axes.add_patch(poly)
-                poly = patches.Polygon(co[:,0,:], fill=False, alpha=.8, linewidth=4, color=color)
-                axes.add_patch(poly)
-            '''
         except ValueError as e:
             print(e)
     return Image.fromarray(colored_mask.astype(np.uint8),'RGB')
     
 
-def save_pastis_images(batch_image,input_data,output_data, out_dir,iteration):
+def save_pastis_images(batch_image,input_data,output_data, out_dir,iteration,colormap):
     #batch_size = len(batch_image)
     #im = get_rgb(batch_image, b=b)
-    colored_gt = plot_pano_gt(pano_gt=input_data)
+    #colored_gt = plot_pano_gt(pano_gt=input_data)
     file_path = '%s/%s_%d.png' % (out_dir, 'debug_batch_gt', iteration)
-    colored_gt.save(file_path,'PNG')
+    #colored_gt.save(file_path,'PNG')
+    input = input_data['semantic'].cpu().numpy()
+    print(f"Input classes: {np.unique(input)}")
+    save_label(input,file_path,colormap)
     
     ## Plot predicted instances
-    colored_pred = plot_pano_predictions(pano_predictions=output_data,
-                        pano_gt=input_data)
+    #colored_pred = plot_pano_predictions(pano_predictions=output_data,
+    #                    pano_gt=input_data)
     file_path = '%s/%s_%d.png' % (out_dir, 'debug_batch_output', iteration)
-    colored_pred.save(file_path, 'PNG')
+    #colored_pred.save(file_path, 'PNG')
+    output = np.squeeze(output_data['semantic'].cpu().numpy(),axis=0)
+    #output = output_data['instance'].cpu().numpy()
+    #print(f"Output classes: {np.unique(output)}")
+    save_label(output,file_path,colormap)
         
 
 def save_debug_images(dataset, batch_images, batch_targets, batch_outputs, out_dir=None, iteration=0,

@@ -5,7 +5,7 @@
 #PBS -l mem=64GB
 #PBS -l ngpus=1
 #PBS -l gputype=T4
-#PBS -l walltime=50:00:00
+#PBS -l walltime=24:00:00
 #PBS -o pastis_test.out
 #PBS -e pastis_test_err.out
 

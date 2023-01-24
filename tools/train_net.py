@@ -159,7 +159,6 @@ def main():
     try:
         for epoch in range(config.SOLVER.Epochs):
             model.train()
-            
             for i,data in enumerate(data_loader):
                 # data
                 start_time = time.time()
@@ -169,15 +168,20 @@ def main():
                 data_time.update(time.time() - start_time)
                 
                 image = data.pop('image')
-                image = applyTransforms(image)
+                #image = applyTransforms(image)
                 out_dict = model(image.type(torch.cuda.FloatTensor), data)
                 loss = out_dict['loss']
+                
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 # Get lr.
                 lr = optimizer.param_groups[best_param_group_id]["lr"]
                 lr_scheduler.step()
+
+                if np.isnan(loss.detach().cpu().numpy()):
+                    print(f'\n ImageFile : {data["image_file"]}')
+                    break
 
                 batch_time.update(time.time() - start_time)
                 loss_meter.update(loss.detach().cpu().item(), image.size(0))
@@ -193,9 +197,13 @@ def main():
                     writer.add_scalar("SegLoss",loss_dict['Semantic loss'].val,total_iter)
                     writer.add_scalar("CenterLoss",loss_dict['Center loss'].val,total_iter)
                     writer.add_scalar("OffsetLoss",loss_dict['Offset loss'].val,total_iter)
+                    msg += f'\n ImageFile : {data["image_file"]}'
                     logger.info(msg)
+                if total_iter == 0 or (total_iter%1000==0):
+                    save_pastis_images(image,data,out_dict,debug_out_dir,total_iter,
+                    data_loader.dataset.create_label_colormap())
+                
                 if total_iter == 0 or (total_iter + 1) % config.CKPT_FREQ == 0:
-                    save_pastis_images(image,data,out_dict, debug_out_dir,total_iter)
                     torch.save({
                         'start_iter': total_iter,
                         'epoch':epoch,

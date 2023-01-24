@@ -94,7 +94,8 @@ def main():
     if config.TEST.MODEL_FILE:
         model_state_file = config.TEST.MODEL_FILE
     else:
-        model_state_file = os.path.join(config.OUTPUT_DIR, 'final_state.pth')
+        #model_state_file = os.path.join(config.OUTPUT_DIR, 'final_state.pth')
+        model_state_file = os.path.join(config.OUTPUT_DIR, 'checkpoint.pth.tar')
 
     if os.path.isfile(model_state_file):
         model_weights = torch.load(model_state_file)
@@ -209,7 +210,7 @@ def main():
                 "Please check your config file if you think it is a mistake.")
     
     pano_meter = PanopticMeter(
-            num_classes=19, void_label=20
+            num_classes=20, void_label=19
         )
     PQ = np.zeros(shape=len(data_loader))
     SQ = np.zeros(shape=len(data_loader))            
@@ -218,8 +219,6 @@ def main():
     model.eval()
     with torch.no_grad():
         for i, data in enumerate(data_loader):
-            if i == 10:
-                break
             if i == timing_warmup_iter:
                 data_time.reset()
                 net_time.reset()
@@ -234,8 +233,8 @@ def main():
                     pass
 
             image = data.pop('image')
-            image = image.type(torch.cuda.FloatTensor)
-            image = image/image.max()
+            #image = image.type(torch.cuda.FloatTensor)
+            #image = image/image.max()
             torch.cuda.synchronize(device)
             data_time.update(time.time() - start_time)
             start_time = time.time()
@@ -243,7 +242,35 @@ def main():
             torch.cuda.synchronize(device)
             net_time.update(time.time() - start_time)
             start_time = time.time()
-            save_pastis_images(image,data,out_dict, debug_out_dir,i)
+            
+            semantic_pred = get_semantic_segmentation(out_dict['semantic'])
+            print(f"GT classes:{torch.unique(data['semantic'])}")
+            print(f"Predicted classes:{torch.unique(semantic_pred)}")
+
+            if 'foreground' in out_dict:
+                foreground_pred = get_semantic_segmentation(out_dict['foreground'])
+            else:
+                foreground_pred = None
+            
+            if config.TEST.EVAL_INSTANCE or config.TEST.EVAL_PANOPTIC:
+                    panoptic_pred, instance_pred,center_pred = get_panoptic_segmentation(
+                        semantic_pred,
+                        out_dict['center'],
+                        out_dict['offset'],
+                        thing_list=data_loader.dataset.thing_list,
+                        label_divisor=data_loader.dataset.label_divisor,
+                        stuff_area=config.POST_PROCESSING.STUFF_AREA,
+                        void_label=(
+                                data_loader.dataset.label_divisor *
+                                data_loader.dataset.ignore_label),
+                        threshold=config.POST_PROCESSING.CENTER_THRESHOLD,
+                        nms_kernel=config.POST_PROCESSING.NMS_KERNEL,
+                        top_k=config.POST_PROCESSING.TOP_K_INSTANCE,
+                        foreground_mask=foreground_pred)
+            out_dict['center_pred'] = center_pred
+            out_dict['instance'] = instance_pred
+            out_dict['semantic'] =  semantic_pred[None,:,:,:]
+            save_pastis_images(image,data,out_dict, debug_out_dir,i,data_loader.dataset.colormap)
             pano_meter.add(out_dict, data)
             
         sq, rq, pq = pano_meter.value()

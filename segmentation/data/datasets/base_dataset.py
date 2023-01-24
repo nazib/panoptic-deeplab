@@ -94,7 +94,6 @@ class BaseDataset(data.Dataset):
 
     def __getitem__(self, index):
         # TODO: handle transform properly when there is no label
-        
         dataset_dict = {}
         assert os.path.exists(self.img_list[index]), 'Path does not exist: {}'.format(self.img_list[index])
         image = self.read_image(self.img_list[index], 'RGB')
@@ -104,24 +103,24 @@ class BaseDataset(data.Dataset):
         if self.ann_list is not None:
             #assert os.path.exists(self.ann_list[index]), 'Path does not exist: {}'.format(self.ann_list[index])
             if self.dataset_type == 'pastis_panoptic':
+                dataset_dict["image_file"] = self.img_list[index]
                 ann_id =  os.path.basename(self.img_list[index]).split('_')[1]
                 ann_index = self.findidx(self.ann_list,ann_id)
+                #print(f'Image file id :{ann_id} Index:{index}')
                 try:
-                    label, raw_label,zone_label,heat_map = self.read_pastis_label(self.ann_list[ann_index], self.label_dtype)
+                    ins_label, sem_label,zone_label,heat_map = self.read_pastis_label(self.ann_list[ann_index], self.label_dtype)
                 except:
                     print(f'Image file id :{ann_id} Index:{index}')
             else:
-                label = self.read_label(self.ann_list[index], self.label_dtype)
+                ins_label = self.read_label(self.ann_list[index], self.label_dtype)
         else:
-            label = None
+            ins_label = None
         
         if self.dataset_type !='pastis_panoptic':
             raw_label = label.copy()
             if self.raw_label_transform is not None:
                 raw_label = self.raw_label_transform(raw_label, self.ins_list[index])['semantic']
         
-        dataset_dict['semantic'] = raw_label
-        dataset_dict['label'] = label
         size = image.shape
         dataset_dict['raw_size'] = np.array(size)
         # To save prediction for official evaluation.
@@ -131,7 +130,7 @@ class BaseDataset(data.Dataset):
 
         # Resize and pad image to the same size before data augmentation
         if self.pre_augmentation_transform is not None:
-            image, label = self.pre_augmentation_transform(image, label)
+            image, sem_label = self.pre_augmentation_transform(image, sem_label)
             size = image.shape
             dataset_dict['size'] = np.array(size)
         else:
@@ -139,27 +138,29 @@ class BaseDataset(data.Dataset):
 
         # Apply data augmentation.
         if self.transform is not None:
-            image, label = self.transform(image, label)
-
-        if self.dataset_type == 'pastis_panoptic':
+            image, sem_label = self.transform(image, sem_label)
+        else:
             image = np.transpose(image,axes=(2,0,1))
+        #import pdb
+        #pdb.set_trace()   
+        if self.dataset_type == 'pastis_panoptic':
+            
             dataset_dict['image'] = image
-            dataset_dict['semantic'] = torch.as_tensor(raw_label.astype('long'))
-            dataset_dict['center'] = torch.as_tensor(label.astype('float32'))
-            dataset_dict['zone'] = torch.as_tensor(zone_label.astype('float32'))
+            dataset_dict['semantic'] = torch.as_tensor(sem_label.astype('long'))
+            dataset_dict['instance'] = torch.as_tensor(ins_label.astype('long'))
+            dataset_dict['zone'] = torch.as_tensor(zone_label.astype('long'))
+            dataset_dict['heat_map'] = torch.as_tensor(heat_map.astype('float32'))
         else:
             dataset_dict['image'] = image
             if not self.has_instance:
-                dataset_dict['semantic'] = torch.as_tensor(label.astype('long'))
-            return dataset_dict
+                dataset_dict['semantic'] = torch.as_tensor(raw_label.astype('long'))
 
         # Generate training target.
         if self.target_transform is not None:
             if self.dataset_type =="pastis_panoptic":
-                label_dict = self.target_transform(label, self.ins_list[ann_index],ann_id)
+                label_dict = self.target_transform(sem_label,ins_label,heat_map, self.ins_list[ann_index],ann_id)
             else:
-                label_dict = self.target_transform(label, self.ins_list[index])
-
+                label_dict = self.target_transform(sem_label, self.ins_list[index])
             for key in label_dict.keys():
                 dataset_dict[key] = label_dict[key]
 
@@ -188,7 +189,8 @@ class BaseDataset(data.Dataset):
         # PIL squeezes out the channel dimension for "L", so make it HWC
         if format == "L":
             image = np.expand_dims(image, -1)
-        #image = image/image.max()
+        #image = (image - image.min())/(image.max() - image.min())
+        #print(f"Max : {image.max()} Min: {image.min()}")
         return image
 
     @staticmethod
@@ -204,6 +206,7 @@ class BaseDataset(data.Dataset):
         root = Path(file_name).parent.parent
         file_id = file_name.split(os.sep)[-1].split('_')[-1].split('.')[0]
         sem_label = np.load(os.path.join(root,'ANNOTATIONS',f'TARGET_{file_id}.npy'))[0]
+        #sem_label = np.asarray(Image.fromarray(sem_label.astype(np.uint8),mode='L').convert('RGB'))
         zone_label = np.load(os.path.join(root,'INSTANCE_ANNOTATIONS',f'ZONES_{file_id}.npy'))
         heat_map = np.load(os.path.join(root,'INSTANCE_ANNOTATIONS',f'HEATMAP_{file_id}.npy'))
         return ins_label, sem_label, zone_label,heat_map

@@ -39,22 +39,23 @@ class PanopticMeter:
             sem_pix,
         ) = target.split((1, 1, 1, 2, 1, 1), dim=-1)
         '''
-        instance_true = target['label'][:,:,:,0]
+        #import pdb
+        #pdb.set_trace()
+        instance_true = target['instance'][:,:,:,0]
         instance_true = instance_true[None ,:,:,:]
         semantic_true = target['semantic']
         semantic_true = semantic_true[None,:,:,:]
 
-        instance_pred = predictions["center"]
-        semantic_pred = predictions["semantic"].argmax(axis=1)
-        semantic_pred = semantic_pred[None,:,:,:]
-        import pdb
-        pdb.set_trace()
+        instance_pred = predictions["instance"]
+        instance_pred = instance_pred[None,:,:,:]
+        semantic_pred = predictions["semantic"]
+        #semantic_pred = semantic_pred[None,:,:,:]
         
         if self.void_label is not None:
             void_masks = semantic_true == self.void_label
             # Ignore Void Objects
             for batch_idx, void_mask in enumerate(void_masks):
-                print(f'Batch in void: {batch_idx}')
+                #print(f'Batch in void: {batch_idx}')
                 if void_mask.any():
                     for void_inst_id, void_inst_area in zip(
                         *torch.unique(instance_true[batch_idx]*void_mask, return_counts=True)
@@ -138,7 +139,7 @@ class PanopticMeter:
             if len(ious) > 0:
                 self.cumulative_ious[i] += torch.stack(ious).sum().to(device='cpu')
 
-    def value(self, per_class=True):
+    def value(self, per_class=False):
         TP, FP, FN = self.counts.float().chunk(3, dim=-1)
         SQ = self.cumulative_ious / TP.squeeze()
         SQ[torch.isnan(SQ) | torch.isinf(SQ)] = 0  # if TP==0

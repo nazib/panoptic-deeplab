@@ -4,7 +4,7 @@
 # ------------------------------------------------------------------------------
 
 import numpy as np
-
+from PIL import Image
 import torch
 
 class PASTIS_PanopticTargetGenerator(object):
@@ -23,8 +23,9 @@ class PASTIS_PanopticTargetGenerator(object):
         ignore_crowd_in_semantic: Boolean, whether to ignore crowd region in semantic segmentation branch,
             crowd region is ignored in the original TensorFlow implementation.
     """
-    def __init__(self, ignore_label, rgb2id, metadata, sigma=8, ignore_stuff_in_offset=False,
-                 small_instance_area=0, small_instance_weight=1, ignore_crowd_in_semantic=False):
+    def __init__(self, ignore_label, rgb2id, metadata,colormap, sigma=2, ignore_stuff_in_offset=False,
+                 small_instance_area=5, small_instance_weight=0.8,
+                ignore_crowd_in_semantic=False):
         self.ignore_label = ignore_label
         self.rgb2id = rgb2id
         self.metadata = metadata
@@ -33,6 +34,7 @@ class PASTIS_PanopticTargetGenerator(object):
         self.small_instance_area = small_instance_area
         self.small_instance_weight = small_instance_weight
         self.ignore_crowd_in_semantic = ignore_crowd_in_semantic
+        self.colormap = colormap
 
         self.sigma = sigma
         size = 6 * sigma + 3
@@ -40,8 +42,29 @@ class PASTIS_PanopticTargetGenerator(object):
         y = x[:, np.newaxis]
         x0, y0 = 3 * sigma + 1, 3 * sigma + 1
         self.g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma ** 2))
+    
+    def save_label(self,image_numpy, image_path,colormap):
+        label = image_numpy
+        MAX = image_numpy.max()
+        image_numpy = image_numpy[None,:,:]
+        if image_numpy.shape[0] == 1:  # grayscale to RGB
+            image_numpy = np.tile(image_numpy, (3, 1, 1))
+        image_numpy = (np.transpose(image_numpy, (1, 2, 0)) + MAX) / 2.0*MAX * 255.0
+        
+        for i,cl in enumerate(colormap):
+            if i ==0 or i==19:
+                continue
+            else:
+                mask = (label==i).astype(int)
+                idx = np.where(mask==1)
+                image_numpy[idx[0],idx[1],:] = colormap[i]
+                
+        image_pil = Image.fromarray(image_numpy.astype(np.uint8))
+        
+        image_pil.save(image_path)
 
-    def __call__(self, panoptic, segments, id):
+
+    def __call__(self,semantic,instance,heatmap,segments, id):
         """Generates the training target.
         reference: https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/preparation/createPanopticImgs.py
         reference: https://github.com/facebookresearch/detectron2/blob/master/datasets/prepare_panoptic_fpn.py#L18
@@ -66,34 +89,31 @@ class PASTIS_PanopticTargetGenerator(object):
                 - offset_weights: Tensor, ignore region of offset prediction, shape=(H, W), used as weights for offset
                     regression 0 is ignore, 1 is has instance. Multiply this mask to loss.
         """
+        #import pdb
+        #pdb.set_trace()
         self.thing_list = list(range(int(self.metadata.loc[self.metadata['id']==id]['N_Parcel'])))
-        panoptic = self.rgb2id(panoptic)
-        height, width = panoptic.shape[0], panoptic.shape[1]
-        semantic = np.zeros_like(panoptic, dtype=np.uint8) + self.ignore_label
-        foreground = np.zeros_like(panoptic, dtype=np.uint8)
+        panoptic = self.rgb2id(instance)
+        height, width = semantic.shape[0], semantic.shape[1]
+        #semantic = np.zeros_like(panoptic, dtype=np.uint8) + self.ignore_label
+        foreground = np.zeros_like(semantic, dtype=np.uint8)
         center = np.zeros((1, height, width), dtype=np.float32)
         center_pts = []
         offset = np.zeros((2, height, width), dtype=np.float32)
-        y_coord = np.ones_like(panoptic, dtype=np.float32)
-        x_coord = np.ones_like(panoptic, dtype=np.float32)
+        y_coord = np.ones_like(semantic, dtype=np.float32)
+        x_coord = np.ones_like(semantic, dtype=np.float32)
         y_coord = np.cumsum(y_coord, axis=0) - 1
         x_coord = np.cumsum(x_coord, axis=1) - 1
         # Generate pixel-wise loss weights
-        semantic_weights = np.ones_like(panoptic, dtype=np.uint8)
+        semantic_weights = np.ones_like(semantic, dtype=np.uint8)
         # 0: ignore, 1: has instance
         # three conditions for a region to be ignored for instance branches:
         # (1) It is labeled as `ignore_label`
         # (2) It is crowd region (iscrowd=1)
         # (3) (Optional) It is stuff region (for offset branch)
-        center_weights = np.zeros_like(panoptic, dtype=np.uint8)
-        offset_weights = np.zeros_like(panoptic, dtype=np.uint8)
+        center_weights = np.zeros_like(semantic, dtype=np.uint8)
+        offset_weights = np.zeros_like(semantic, dtype=np.uint8)
         for seg in segments:
             cat_id = seg["category_id"]
-            if self.ignore_crowd_in_semantic:
-                if not seg['iscrowd']:
-                    semantic[panoptic == seg["id"]] = cat_id
-            else:
-                semantic[panoptic == seg["id"]] = cat_id
             if cat_id in self.thing_list:
                 foreground[panoptic == seg["id"]] = 1
             if not seg['iscrowd']:
@@ -139,22 +159,31 @@ class PASTIS_PanopticTargetGenerator(object):
 
                 cc, dd = max(0, ul[0]), min(br[0], width)
                 aa, bb = max(0, ul[1]), min(br[1], height)
-                center[0, aa:bb, cc:dd] = np.maximum(
-                    center[0, aa:bb, cc:dd], self.g[a:b, c:d])
-                
+                #center[0, aa:bb, cc:dd] = np.maximum(center[0, aa:bb, cc:dd], self.g[a:b, c:d])
+                center[0, aa:bb, cc:dd] = np.maximum(heatmap[aa:bb, cc:dd], self.g[a:b, c:d])
+
                 # generate offset (2, h, w) -> (y-dir, x-dir)
                 offset_y_index = (np.zeros_like(mask_index[0]), mask_index[0], mask_index[1])
                 offset_x_index = (np.ones_like(mask_index[0]), mask_index[0], mask_index[1])
                 offset[offset_y_index] = center_y - y_coord[mask_index]
                 offset[offset_x_index] = center_x - x_coord[mask_index]
-
+        '''
+        self.save_label(semantic,
+        "/home/nazib/PASTIS_training/panoptic-deeplab/output/test/semantic.jpg",self.colormap)
+        self.save_label(semantic_weights,
+        "/home/nazib/PASTIS_training/panoptic-deeplab/output/test/semantic_weights.jpg",self.colormap)
+        self.save_label(center[0],
+        "/home/nazib/PASTIS_training/panoptic-deeplab/output/test/center.jpg",self.colormap)
+        self.save_label(center_weights,
+        "/home/nazib/PASTIS_training/panoptic-deeplab/output/test/center_weights.jpg",self.colormap)
+        '''
         return dict(
             semantic=torch.as_tensor(semantic.astype('long')),
             foreground=torch.as_tensor(foreground.astype('long')),
             center=torch.as_tensor(center.astype(np.float32)),
             center_points=torch.as_tensor(center_pts),
             offset=torch.as_tensor(offset.astype(np.float32)),
-            semantic_weights=torch.as_tensor(semantic_weights.astype(np.float32)),
+            #semantic_weights=torch.as_tensor(semantic_weights.astype(np.float32)),
             center_weights=torch.as_tensor(center_weights.astype(np.float32)),
             offset_weights=torch.as_tensor(offset_weights.astype(np.float32))
         )
@@ -340,6 +369,8 @@ class PASTIS_SemanticTargetGenerator(object):
             A dictionary with fields:
                 - semantic: Tensor, semantic label, shape=(H, W).
         """
+        import pdb
+        pdb.set_trace()
         panoptic = self.rgb2id(panoptic)
         semantic = np.zeros_like(panoptic, dtype=np.uint8) + self.ignore_label
         for seg in segments:

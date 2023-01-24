@@ -23,7 +23,7 @@ def build_transforms(dataset, is_train=True):
         min_scale = 1
         max_scale = 1
         scale_step_size = 0
-        flip_prob = 0
+        flip_prob = 0.5
         crop_h = dataset.crop_h
         crop_w = dataset.crop_w
         pad_value = dataset.pad_value
@@ -33,12 +33,6 @@ def build_transforms(dataset, is_train=True):
 
     transforms = T.Compose(
         [
-            T.RandomScale(
-                min_scale,
-                max_scale,
-                scale_step_size
-            ),
-           
             T.RandomHorizontalFlip(flip_prob),
             T.ToTensor()
         ]

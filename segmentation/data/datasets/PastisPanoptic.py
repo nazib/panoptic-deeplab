@@ -19,7 +19,7 @@ from ..transforms import PASTIS_PanopticTargetGenerator, PASTIS_SemanticTargetGe
 _PASTIS_PANOPTIC_INFORMATION = DatasetDescriptor(
     splits_to_sizes={'PASTIS_train': 111422,
                      'PASTIS_test': 3800},
-    num_classes=19,
+    num_classes=20,
     ignore_label=19,
 )
 
@@ -93,8 +93,8 @@ class PASTISPanoptic(BaseDataset):
                  std=(0.229, 0.224, 0.225),
                  semantic_only=False,
                  ignore_stuff_in_offset=False,
-                 small_instance_area=0,
-                 small_instance_weight=1,
+                 small_instance_area=10,
+                 small_instance_weight=0.8,
                  **kwargs):
         super(PASTISPanoptic, self).__init__(root,dataset_type, split, is_train, crop_size, mirror, min_scale, max_scale,
                                            scale_step_size, mean, std)
@@ -111,7 +111,7 @@ class PASTISPanoptic(BaseDataset):
         self.metadata = gpd.read_file(os.path.join(self.root,"metadata.geojson"))
         self.metadata.index = self.metadata["ID_PATCH"].astype(int)
         self.metadata.sort_index(inplace=True)
-
+        self.colormap = self.create_label_colormap()
         # Get image and annotation list.
         self.img_list = []
         self.ann_list = []
@@ -136,7 +136,7 @@ class PASTISPanoptic(BaseDataset):
         #pdb.set_trace()
         assert len(self) == _PASTIS_PANOPTIC_INFORMATION.splits_to_sizes[self.split]
 
-        self.pre_augmentation_transform = Resize(min_resize_value, max_resize_value, resize_factor)
+        #self.pre_augmentation_transform = Resize(min_resize_value, max_resize_value, resize_factor)
         #self.transform = build_transforms(self, is_train)
         self.transform = None
         if semantic_only:
@@ -147,7 +147,8 @@ class PASTISPanoptic(BaseDataset):
         else:
             if dataset_type == 'pastis_panoptic':
                 self.target_transform = PASTIS_PanopticTargetGenerator(self.ignore_label, self.rgb2id,self.metadata,
-                                                                sigma=8, ignore_stuff_in_offset=ignore_stuff_in_offset,
+                                                                self.colormap,
+                                                                sigma=2, ignore_stuff_in_offset=ignore_stuff_in_offset,
                                                                 small_instance_area=small_instance_area,
                                                                 small_instance_weight=small_instance_weight)
             else:

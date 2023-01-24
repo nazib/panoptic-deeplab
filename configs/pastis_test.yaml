@@ -70,6 +70,6 @@ POST_PROCESSING:
   NMS_KERNEL: 7
   TOP_K_INSTANCE: 200
   STUFF_AREA: 2048
-OUTPUT_DIR: "./output/UnNormalized_5_epochs"
+OUTPUT_DIR: "./output/Test-conf-1"
 GPUS: (0,1)
 WORKERS: 2

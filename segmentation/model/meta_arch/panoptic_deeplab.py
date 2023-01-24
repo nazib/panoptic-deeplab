@@ -95,9 +95,13 @@ class PanopticDeepLab(BaseSegmentationModel):
         return result
 
     def loss(self, results, targets=None):
-        import pdb
-        pdb.set_trace()
+        #import pdb
+        #pdb.set_trace()
         batch_size = results['semantic'].size(0)
+        #print(f"Loss calculation...")
+        #print(f"GT classes {torch.unique(targets['semantic'])}")
+        #output = torch.argmax(results['semantic'],axis=1)
+        #print(f"Output classes {torch.unique(output)}")
         loss = 0
         if targets is not None:
             if 'semantic_weights' in targets.keys():

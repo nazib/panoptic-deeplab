@@ -234,4 +234,4 @@ def get_panoptic_segmentation(sem, ctr_hmp, offsets, thing_list, label_divisor, 
                                                  thing_seg=thing_seg)
     panoptic = merge_semantic_and_instance(semantic, instance, label_divisor, thing_list, stuff_area, void_label)
 
-    return panoptic, center
+    return panoptic, instance,center

@@ -128,36 +128,30 @@ def build_train_loader_from_cfg(config):
     )
     images_per_worker = images_per_batch // num_workers
     dataset = build_dataset_from_cfg(config, is_train=True)
-    x = dataset.__getitem__(10)
-
-    if config.DATASET.DATASET != 'pastis_panoptic':
-        sampler_name = config.DATALOADER.SAMPLER_TRAIN
-        logger = logging.getLogger(__name__)
-        logger.info("Using training sampler {}".format(sampler_name))
-        if sampler_name == "TrainingSampler":
-            sampler = samplers.TrainingSampler(len(dataset), shuffle=config.DATALOADER.TRAIN_SHUFFLE)
-        else:
-            raise ValueError("Unknown training sampler: {}".format(sampler_name))
-
-        batch_sampler = torch.utils.data.sampler.BatchSampler(
+    #x = dataset.__getitem__(10)
+    sampler_name = config.DATALOADER.SAMPLER_TRAIN
+    
+    sampler = samplers.TrainingSampler(len(dataset), shuffle=config.DATALOADER.TRAIN_SHUFFLE)
+    batch_sampler = torch.utils.data.sampler.BatchSampler(
             sampler, images_per_worker, drop_last=True
         )
-        # drop_last so the batch always have the same size
-        #import pdb
-        #pdb.set_trace()
-        #x = dataset.__getitem__(0)
+       
+    if config.DATASET.DATASET != 'pastis_panoptic':
+        logger = logging.getLogger(__name__)
+        logger.info("Using training sampler {}".format(sampler_name))
         data_loader = torch.utils.data.DataLoader(
             dataset,
             num_workers=config.DATALOADER.NUM_WORKERS,
             batch_sampler=batch_sampler,
             worker_init_fn=worker_init_reset_seed,
-            shuffle = True
+            shuffle =True
         )
     else:
         data_loader = torch.utils.data.DataLoader(
             dataset,
             num_workers=config.DATALOADER.NUM_WORKERS,
-            worker_init_fn=worker_init_reset_seed, shuffle = True
+            #batch_sampler=batch_sampler,
+            worker_init_fn=worker_init_reset_seed
         )
     '''
     data_loader = torch.utils.data.DataLoader(
